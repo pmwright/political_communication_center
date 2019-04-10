@@ -10,8 +10,12 @@ import csv
 #todo
 #save oid in file
 #make it work with preexisting oid and original folders
-#make it process folders of folders
+#DONE - make it process folders of folders
 #DONE - include auditing
+
+class noExcelError(Exception):
+    """Raised when no Excel file is found"""
+    pass
 
 def instructions(): #Tell user how to copy pathname and how to use program
     print("To copy a folder's location:")
@@ -27,11 +31,12 @@ def xlsxChecker(xlsx_file): #Checks to see that one and only one Excel file exis
             xlsx_file.remove(file)
     
     #If !=1 Excel file is found
-    while len(xlsx_file)!=1:
-        if len(xlsx_file) == 0:
-            print("No Excel file found.\n\n")
-        if len(xlsx_file) > 1:
-            print("Multiple Excel files found, please delete unnecessary Excel files.\n\n")
+    if len(xlsx_file) == 0:
+        raise noExcelError
+        
+    while len(xlsx_file)>1:
+          
+        print("Multiple Excel files found, please delete unnecessary Excel files.\n\n")
          
         #Waits for user to fix folder or provide new folder   
         directory = input("Please input folder pathname: ")
@@ -41,43 +46,32 @@ def xlsxChecker(xlsx_file): #Checks to see that one and only one Excel file exis
     return(xlsx_file)
             
 def xlrdHandler(xlsx_file): #Opens Excel file reader using xlrd
-    try:
-        workbook = xlrd.open_workbook(xlsx_file[0])
-        sheet = workbook.sheet_by_index(0)
-        return(sheet)
-    #In the unlikely event that no Excel file can be loaded after glob finds one
-    except IndexError:
-        #in theory this error should never throw
-        print("Excel file could not be loaded: XLRD")
-        print('\n\nPress enter to skip folder...')
-        input()
-        continue
-    
+    workbook = xlrd.open_workbook(xlsx_file[0])
+    sheet = workbook.sheet_by_index(0)
+    return(sheet)
+
 def openpyxlHandler(xlsx_file): #Opens Excel file handler using OpenPyXl
-    try:
-        wb=load_workbook(filename = xlsx_file[0])
-        ws=wb.active
-        return [wb,ws]
-    #In the unlikely event that no Excel file can be loaded after glob finds one
-    except IndexError:
-        #in theory this error should never throw
-        print("Excel file could not be loaded: OpenPyXl")
-        print('\n\nPress enter to skip folder...')
-        input()
-        continue
+    wb=load_workbook(filename = xlsx_file[0])
+    ws=wb.active
+    return [wb,ws]
     
-def sheetValidation(sheet): #Checks Excel formatting
+def sheetValidation(sheet, directory): #Checks Excel formatting
     if sheet.cell_value(0, 1) != 'OID':
+        print(directory)
         print("Improperly formatted Excel file: OID.")
         print('\n\nPress enter to skip folder...')
         input()
-        continue
+        return False
 
-    if sheet.cell_value(0, 22) != 'TITLE':
+    elif sheet.cell_value(0, 22) != 'TITLE':
+        print(directory)
         print("Improperly formatted Excel file: TITLE.")
         print('\n\nPress enter to skip folder...')
         input()
-        continue
+        return False
+    
+    else:
+        return True
 
 def xlsxVideoListReader(sheet): #Makes a list of video titles from Excel file
     video_title_from_file = []
@@ -108,7 +102,7 @@ def xlsxFolderAuditor(flist, directory, video_title_from_file): #Audits the cont
         print("Could not read excel file: AttributeError.")
         print('\n\nPress enter to skip folder...')
         input()
-        continue
+        return False
     
     #Print the videos that were not in excel file  
     if len(clean_video_titles) != 0:
@@ -124,7 +118,9 @@ def xlsxFolderAuditor(flist, directory, video_title_from_file): #Audits the cont
         print("\nPlease audit the videos in this folder before adding OID\n\n\n")
         print('\n\nPress enter to skip folder...')
         input()
-        continue
+        return False
+    
+    return True
     
 def makeOIDFolder(directory):#Makes folder for videos with OIDs
     oid_dir = directory + "/OID"
@@ -137,16 +133,6 @@ def makeOriginalFolder(directory): #Makes folder for videos without OIDs
     os.mkdir(origin_dir)
     origin_dir = directory + "/Original/"
     return (origin_dir)
-
-def clipVideoOrDie(video): #Tries to modify the video, if unable, throws error
-    try:
-        clip2 = VideoFileClip(video)
-        return(clip2)
-    except KeyError:
-        print("\n\nError processing "+video)
-        print('\n\nPress enter to skip video...')
-        input()
-        continue
 
 def makeBlueVideo(clip2, oid, directory): #Create 3 second long blue video with OID number
     img = Image.new('RGB',(clip2.size[0], clip2.size[1]), color='blue')
@@ -179,7 +165,13 @@ def insertOIDIntoXlsx(sheet, cleanFname, ws, oid): #Finds flie line in sheet and
 
 def editInsertMoveVideo(video_list, oid, directory, oid_dir, sheet, ws, origin_dir): #Main function for modifying videos
     for video in video_list:
-        clip2 = clipVideoOrDie(video)
+        try:
+            clip2 = VideoFileClip(video)
+        except KeyError:
+            print("\n\nError processing "+video)
+            print('\n\nPress enter to skip video...')
+            input()
+            continue
         
         audioclip = AudioFileClip(video)
         videoclip2 = clip2.set_audio(audioclip)
@@ -200,8 +192,15 @@ def editInsertMoveVideo(video_list, oid, directory, oid_dir, sheet, ws, origin_d
     return(oid)
     
 def removeTempFiles(directory): #remove temporary video files
-    os.remove(directory+"/black.png")
-    os.remove(directory+"/blue.png")
+    try:
+        os.remove(directory+"/black.png")
+    except FileNotFoundError:
+        print("No black.png found for deletion")
+    
+    try:
+        os.remove(directory+"/blue.png")
+    except FileNotFoundError:
+        print("No blue.png found for deletion")
 
 def printNextOID(oid): #Prints next OID to be used
     print("\n\n\n########################")
@@ -229,32 +228,72 @@ def main(): #Main
     
     directories = glob.glob(folder+"/*")
     for directory in directories: 
+        print()
+        print(directory)
+        print()
         #Finds all .mp4 videos in folder
         video_list = glob.glob(directory+"/*.mp4")
         #Finds all Excel files in folder
         xlsx_file = glob.glob(directory+"/*.xlsx")
         
         #Checks that Excel files are formatted properly
-        xlsx_file = xlsxChecker(xlsx_file)
+        try:
+            xlsx_file = xlsxChecker(xlsx_file)
+        except noExcelError:
+            print()
+            print("No Excel file found in "+directory)
+            print('\n\nPress enter to skip folder...')
+            input()
+            continue
         
         #Creates xlrd handler
-        sheet = xlrdHandler(xlsx_file)
+        try:
+            sheet = xlrdHandler(xlsx_file)
+            #In the unlikely event that no Excel file can be loaded after glob finds one
+        except IndexError:
+            #in theory this error should never throw
+            print("Excel file could not be loaded: XLRD")
+            print('\n\nPress enter to skip folder...')
+            input()
+            continue
+        
         #Creates OpenPyXl handler wbws[0]==workbook, wbws[1]==worksheet
-        wbws = openpyxlHandler(xlsx_file)
+        try:
+            wbws = openpyxlHandler(xlsx_file)
+        #In the unlikely event that no Excel file can be loaded after glob finds one
+        except IndexError:
+            #in theory this error should never throw
+            print("Excel file could not be loaded: OpenPyXl")
+            print('\n\nPress enter to skip folder...')
+            input()
+            continue
         
         #Checks Excel sheet formatting
-        sheetValidation(sheet)
+        if not sheetValidation(sheet, directory):
+            continue
         
         #Makes a list of video titles from Excel file
         video_title_from_file = xlsxVideoListReader(sheet)
         
         #Audits the content of an Excel sheet against the contents of a folder
-        xlsxFolderAuditor(video_list, directory, video_title_from_file)    
+        if not xlsxFolderAuditor(video_list, directory, video_title_from_file):
+            continue
         
         #Makes folder for OID processed videos
-        oid_dir = makeOIDFolder(directory)
+        try: 
+            oid_dir = makeOIDFolder(directory)
+        except FileExistsError:
+            print("Using existing OID folder")
+            oid_dir = directory + "/OID/"
+            print(oid_dir)
+         
         #Makes folder for unprocessed videos
-        origin_dir = makeOriginalFolder(directory)
+        try:
+            origin_dir = makeOriginalFolder(directory)
+        except FileExistsError:
+            print("Using existing Original folder")
+            origin_dir = directory + "/Original/"
+            print(origin_dir)
         
         #Edits videos by prepending with blue video with OID and by prepending and appending with black video
         #Then prepends video name with OID
