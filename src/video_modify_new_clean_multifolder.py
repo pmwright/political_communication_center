@@ -1,3 +1,9 @@
+# Looks in a folder of folders and adds OIDs to the .mp4 file names and adds those OIDs to the Excel sheets
+# 
+# By: Patrick Wright, git: pmwright
+# For: The Julian P. Kanter Commercial Archive
+# Date: Spring 2019
+
 from moviepy.editor import *
 import moviepy.editor as mp
 from PIL import Image, ImageDraw, ImageFont
@@ -7,9 +13,9 @@ from openpyxl import load_workbook
 import re
 import csv
 
-#todo
-#save oid in file
-#make it work with preexisting oid and original folders
+#To do
+#DONE - save OID in file
+#Done - make it work with preexisting OID and original folders
 #DONE - make it process folders of folders
 #DONE - include auditing
 
@@ -23,7 +29,21 @@ def instructions(): #Tell user how to copy pathname and how to use program
     print("     2. Hold down the \'option\' key")
     print("     3. Click \'Copy Folder as Pathname\'")
     print("     4. Paste the folder Pathname below\n")
-            
+    
+def oidReader(oidFilePath): #Tries to read in OID from file, takes user input if no file is found
+    try:
+        with open(oidFilePath) as file:
+            oid = file.read()
+            if oid:
+                print("OID found: "+oid)
+            else:
+                oid = input("OID file empty, please enter next OID to be used: ")
+            return oid
+        
+    except FileNotFoundError:
+        oid = input("No OID file found, please enter next OID to be used: ")
+        return oid
+                
 def xlsxChecker(xlsx_file): #Checks to see that one and only one Excel file exists per folder
     #Ignore Excel temporary files
     for file in xlsx_file:
@@ -152,12 +172,12 @@ def makeBlackVideo(clip2, directory): #Makes 3 second long black video
         d_black = ImageDraw.Draw(img1)
         img1.save(directory+'/black.png')
         
-def concatVideoClips(directory, videoclip2, oid_dir, oid, cleanFname): #Concat all clips
+def concatVideoClips(directory, videoclip2, oid_dir, oid, cleanFname): #Concatenate all clips
     clips = [ImageClip(directory+'/blue.png').set_duration(2), ImageClip(directory+'/black.png').set_duration(3), videoclip2, ImageClip(directory+'/black.png').set_duration(3) ]
     concat_clip = mp.concatenate_videoclips(clips)
     concat_clip.write_videofile(oid_dir + str(oid)+cleanFname+'.mp4', audio_codec='libmp3lame')
 
-def insertOIDIntoXlsx(sheet, cleanFname, ws, oid): #Finds flie line in sheet and insert OID in column B
+def insertOIDIntoXlsx(sheet, cleanFname, ws, oid): #Finds file line in sheet and insert OID in column B
     #I'm sorry for using xlrd with openpyxl
     for rowx in range(1,sheet.nrows):
         if sheet.cell_value(rowx, 22) == cleanFname:
@@ -202,12 +222,15 @@ def removeTempFiles(directory): #remove temporary video files
     except FileNotFoundError:
         print("No blue.png found for deletion")
 
-def printNextOID(oid): #Prints next OID to be used
+def printAndSaveOID(oid, oidFilePath): #Prints next OID to be used and saves OID to file
     print("\n\n\n########################")
     print("########################")
     print("    Next OID " + str(oid))
     print("########################")
     print("########################\n\n\n")
+    
+    with open(oidFilePath, "w+") as file:
+        file.write(str(oid))
     
 def makeCSV(directory, xlsx_file, ws): #Creates CSV to be imported in to database
     cleanExcelName = re.search(directory+'\\'+'/(.*).xlsx', xlsx_file[0]).group(1)
@@ -223,8 +246,10 @@ def main(): #Main
     
     #Reads in folder to be used
     folder = input("Please input folder pathname: ")
+    
     #Reads in first OID to use
-    oid = int(input("Please enter the OID: "))
+    oidFilePath = "oid.txt"
+    oid = oidReader(oidFilePath)
     
     directories = glob.glob(folder+"/*")
     for directory in directories: 
@@ -309,8 +334,8 @@ def main(): #Main
         #Makes CSV for database
         makeCSV(directory, xlsx_file, wbws[1])
         
-    #Prints next OID to be used
-    printNextOID(oid)
+    #Prints next OID to be used and saves OID to file
+    printAndSaveOID(oid, oidFilePath)
     
 if __name__ == "__main__":
     main()
