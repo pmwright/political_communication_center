@@ -1,6 +1,6 @@
 # Looks in a folder of folders and adds OIDs to the .mp4 file names and adds those OIDs to the Excel sheets
 # 
-# By: Patrick Wright, git: pmwright
+# By: Patrick Wright, github: pmwright
 # For: The Julian P. Kanter Commercial Archive
 # Date: Spring 2019
 
@@ -18,6 +18,7 @@ import csv
 #Done - make it work with preexisting OID and original folders
 #DONE - make it process folders of folders
 #DONE - include auditing
+#
 
 class noExcelError(Exception):
     """Raised when no Excel file is found"""
@@ -208,7 +209,7 @@ def editInsertMoveVideo(video_list, oid, directory, oid_dir, sheet, ws, origin_d
         #Move original files to new folder    
         os.rename(video, origin_dir + cleanFname + '.mp4')
         
-        oid += 1
+        oid = int(oid) + 1
     return(oid)
     
 def removeTempFiles(directory): #remove temporary video files
@@ -223,7 +224,7 @@ def removeTempFiles(directory): #remove temporary video files
         print("No blue.png found for deletion")
 
 def printAndSaveOID(oid, oidFilePath): #Prints next OID to be used and saves OID to file
-    print("\n\n\n########################")
+    print("\n########################")
     print("########################")
     print("    Next OID " + str(oid))
     print("########################")
@@ -251,6 +252,8 @@ def main(): #Main
     oidFilePath = "oid.txt"
     oid = oidReader(oidFilePath)
     
+    badDirectories = []
+    
     directories = glob.glob(folder+"/*")
     for directory in directories: 
         print()
@@ -269,6 +272,7 @@ def main(): #Main
             print("No Excel file found in "+directory)
             print('\n\nPress enter to skip folder...')
             input()
+            badDirectories.append(directory)
             continue
         
         #Creates xlrd handler
@@ -280,6 +284,7 @@ def main(): #Main
             print("Excel file could not be loaded: XLRD")
             print('\n\nPress enter to skip folder...')
             input()
+            badDirectories.append(directory)
             continue
         
         #Creates OpenPyXl handler wbws[0]==workbook, wbws[1]==worksheet
@@ -291,10 +296,12 @@ def main(): #Main
             print("Excel file could not be loaded: OpenPyXl")
             print('\n\nPress enter to skip folder...')
             input()
+            badDirectories.append(directory)
             continue
         
         #Checks Excel sheet formatting
         if not sheetValidation(sheet, directory):
+            badDirectories.append(directory)
             continue
         
         #Makes a list of video titles from Excel file
@@ -302,6 +309,7 @@ def main(): #Main
         
         #Audits the content of an Excel sheet against the contents of a folder
         if not xlsxFolderAuditor(video_list, directory, video_title_from_file):
+            badDirectories.append(directory)
             continue
         
         #Makes folder for OID processed videos
@@ -334,6 +342,10 @@ def main(): #Main
         #Makes CSV for database
         makeCSV(directory, xlsx_file, wbws[1])
         
+    print("The following folders were not able to be processed:")
+    print("----------------------------------------------------")
+    for badDir in badDirectories:
+        print(badDir)
     #Prints next OID to be used and saves OID to file
     printAndSaveOID(oid, oidFilePath)
     
