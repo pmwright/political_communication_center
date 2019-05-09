@@ -1,4 +1,4 @@
-# Looks in a folder of folders and adds OIDs to the .mp4 file names and adds those OIDs to the Excel sheets
+# Looks in a folder of folders and adds OIDs to the .mp4 file names and adds those OIDs to the Excel sheets, then sorts files by original and oid
 # 
 # By: Patrick Wright, github: pmwright
 # For: The Julian P. Kanter Commercial Archive
